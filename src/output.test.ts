@@ -37,6 +37,12 @@ describe('output TTY detection', () => {
     expect(JSON.parse(out)).toEqual([{ name: 'alice', note: 'line 1\nline 2' }]);
   });
 
+  it('rejects unsupported output formats instead of silently rendering a table', () => {
+    expect(() => render([{ name: 'alice' }], { fmt: 'bogus', fmtExplicit: true }))
+      .toThrow('--format must be one of: table, plain, json, yaml, md, csv. Received: "bogus"');
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
   it('shows elapsed time when elapsed is 0', () => {
     Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
     render([{ name: 'alice' }], { fmt: 'table', columns: ['name'], elapsed: 0 });
