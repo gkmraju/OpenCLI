@@ -4,6 +4,7 @@
 
 import Table from 'cli-table3';
 import yaml from 'js-yaml';
+import { ArgumentError } from './errors.js';
 
 export interface RenderOptions {
   fmt?: string;
@@ -15,6 +16,9 @@ export interface RenderOptions {
   source?: string;
   footerExtra?: string;
 }
+
+const OUTPUT_FORMATS = ['table', 'plain', 'json', 'yaml', 'md', 'csv'] as const;
+const OUTPUT_FORMAT_ALIASES = new Set(['markdown', 'yml']);
 
 function normalizeRows(data: unknown): Record<string, unknown>[] {
   if (Array.isArray(data)) return data;
@@ -28,6 +32,9 @@ function resolveColumns(rows: Record<string, unknown>[], opts: RenderOptions): s
 
 export function render(data: unknown, opts: RenderOptions = {}): void {
   let fmt = opts.fmt ?? 'table';
+  if (!OUTPUT_FORMATS.includes(fmt as (typeof OUTPUT_FORMATS)[number]) && !OUTPUT_FORMAT_ALIASES.has(fmt)) {
+    throw new ArgumentError(`--format must be one of: ${OUTPUT_FORMATS.join(', ')}. Received: "${fmt}"`);
+  }
   // Non-TTY auto-downgrade only when format was NOT explicitly passed by user.
   if (!opts.fmtExplicit) {
     if (fmt === 'table' && !process.stdout.isTTY) fmt = 'yaml';
@@ -42,7 +49,7 @@ export function render(data: unknown, opts: RenderOptions = {}): void {
     case 'md': case 'markdown': renderMarkdown(data, opts); break;
     case 'csv': renderCsv(data, opts); break;
     case 'yaml': case 'yml': renderYaml(data); break;
-    default: renderTable(data, opts); break;
+    case 'table': renderTable(data, opts); break;
   }
 }
 
