@@ -52,22 +52,26 @@ cli({
 
             writeStarted = true;
             bookmarkBtn.click();
-            await new Promise(r => setTimeout(r, 1000));
 
-            // Verify
-            const verifyArticle = findTargetArticle() || targetArticle;
-            const verify = verifyArticle?.querySelector('[data-testid="removeBookmark"]');
-            if (verify) {
-                return { ok: true, message: 'Tweet successfully bookmarked.' };
-            } else {
-                return { ok: false, unconfirmed: true, message: 'Bookmark action initiated but UI did not update.' };
+            // The bookmark write can succeed before X updates the article DOM.
+            // Poll for the idempotent removeBookmark state instead of treating a
+            // single delayed render as an uncertain write.
+            for (let verifyAttempt = 0; verifyAttempt < 10; verifyAttempt++) {
+                const verifyArticle = findTargetArticle() || targetArticle;
+                const verify = verifyArticle?.querySelector('[data-testid="removeBookmark"]');
+                if (verify) {
+                    return { ok: true, message: 'Tweet successfully bookmarked.' };
+                }
+                await new Promise(r => setTimeout(r, 500));
             }
+
+            return { ok: false, unconfirmed: true, message: 'Bookmark action initiated but UI did not update.' };
         } catch (e) {
             return { ok: false, unconfirmed: writeStarted, message: e.toString() };
         }
     })()`);
         if (result.unconfirmed) {
-            throw new TimeoutError('twitter bookmark confirmation', 1, `${result.message} Check the tweet before retrying; the bookmark may already have succeeded.`);
+            throw new TimeoutError('twitter bookmark confirmation', 5, `${result.message} Check the tweet before retrying; the bookmark may already have succeeded.`);
         }
         if (!result.ok) {
             throw new CommandExecutionError(result.message, 'Nothing changed. Open the tweet in the browser and retry.');
