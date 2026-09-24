@@ -106,33 +106,34 @@ export const command = cli({
         await page.goto(`https://www.xiaohongshu.com/user/profile/${userId}`);
         let snapshot = await readUserSnapshotHydrated(page);
         if (isLoginWallSnapshot(snapshot)) {
-            // profile 页登录态失效 → 302 到 /login。绝不能误报成 "Malformed user store" /
-            // EMPTY_RESULT —— 那会让下游（ml-scout 等）把登录失效当解析失败 / 空号，白等
-            // rate-limit cooldown（实测 2026-06-09：风控把 profile 浏览态降级 → 整批 seed
-            // 重定向到 /login）。抛 AUTH_REQUIRED，让 caller 提示用户重登 xiaohongshu.com。
             throwLoginWallAuthRequired();
         }
         assertReadableUserSnapshot(snapshot);
         let results = extractXhsUserNotes(snapshot ?? {}, userId);
         let previousCount = results.length;
-        for (let i = 0; results.length < limit && i < 4; i += 1) {
+        let stagnantScrolls = 0;
+        // Keep the historical four-scroll floor for small requests, but scale
+        // the budget for larger --limit values. A single quiet scroll is not
+        // terminal because the profile store can update after a delayed fetch.
+        const maxScrolls = Math.max(4, Math.ceil(limit / 10));
+        for (let i = 0; results.length < limit && i < maxScrolls && stagnantScrolls < 3; i += 1) {
             await page.autoScroll({ times: 1, delayMs: 1500 });
-            await page.wait(1);
+            await page.wait({ time: 2 });
             snapshot = await readUserSnapshot(page);
             if (isLoginWallSnapshot(snapshot)) {
                 throwLoginWallAuthRequired();
             }
             assertReadableUserSnapshot(snapshot);
             const nextResults = extractXhsUserNotes(snapshot ?? {}, userId);
-            if (nextResults.length <= previousCount)
-                break;
+            if (nextResults.length <= previousCount) {
+                stagnantScrolls += 1;
+                continue;
+            }
             results = nextResults;
             previousCount = nextResults.length;
+            stagnantScrolls = 0;
         }
         if (results.length === 0) {
-            // 与 bilibili subtitle 同模式：作者无公开内容是合法 empty 数据条件
-            // （销号 / 私密号 / 全删笔记），不是 fetch 失败。下游应识别 code
-            // EMPTY_RESULT 跳过 rate-limit 启发式、不计入 softFail 阈值。
             throw new EmptyResultError('xiaohongshu user', '该用户没有公开笔记（可能销号 / 私密 / 全部删除）。');
         }
         return results.slice(0, limit);
