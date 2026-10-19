@@ -86,6 +86,21 @@ describe('boundingRectResolvedJs runtime behavior', () => {
     expect(out.w).toBe(60);
   });
 
+  it('keeps a retargeted click inside the selected chip, not its pointer ancestor (#2674)', () => {
+    // The parent center (1150,240) is an empty gap between chips; the
+    // selected chip center (1092,207) is the only safe native click target.
+    const panel = makeEl({ tag: 'div', rect: { left: 1000, top: 180, width: 300, height: 120 }, cursor: 'pointer' });
+    const chip = makeEl({ tag: 'div', rect: { left: 1044, top: 187, width: 96, height: 40 }, cursor: 'pointer' });
+    chip.parentElement = panel; panel.children = [chip];
+    const out = runRect(chip, (x, y) => (
+      x >= 1044 && x < 1140 && y >= 187 && y < 227 ? chip : panel
+    ));
+    expect(out.retargeted).toBe(true);
+    expect(out.x).toBe(1092);
+    expect(out.y).toBe(207);
+    expect(out.hit).toBe('target');
+  });
+
   it('does not retarget when no ancestor is clickable', () => {
     const wrap = makeEl({ tag: 'div', rect: { left: 0, top: 0, width: 60, height: 60 } });
     const span = makeEl({ tag: 'span', rect: { left: 10, top: 10, width: 40, height: 40 } });
