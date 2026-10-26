@@ -1,3 +1,4 @@
+import { AuthRequiredError } from '@jackwener/opencli/errors';
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { clampInt, requireNonEmptyQuery } from '../_shared/common.js';
 cli({
@@ -22,10 +23,15 @@ cli({
         const data = await page.evaluate(`
       (async () => {
         const normalize = v => (v || '').replace(/\\s+/g, ' ').trim();
+        // A JD login redirect must not masquerade as an empty product search.
+        const onLoginPage = () => location.hostname === 'passport.jd.com';
+        if (onLoginPage()) return { error: 'auth-required' };
         for (let i = 0; i < 20; i++) {
+          if (onLoginPage()) return { error: 'auth-required' };
           if (document.querySelectorAll('div[data-sku]').length > 0) break;
           await new Promise(r => setTimeout(r, 500));
         }
+        if (onLoginPage()) return { error: 'auth-required' };
         const items = document.querySelectorAll('div[data-sku]');
         const results = [];
         for (const el of items) {
@@ -61,6 +67,13 @@ cli({
         return results;
       })()
     `);
+        if (data?.error === 'auth-required') {
+            throw new AuthRequiredError(
+                'jd.com',
+                'JD search redirected to the login page',
+                'Log in to JD in the same browser profile, then retry jd search',
+            );
+        }
         return Array.isArray(data) ? data : [];
     },
 });
