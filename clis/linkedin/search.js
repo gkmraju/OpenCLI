@@ -95,6 +95,10 @@ function decodeLinkedinRedirect(url) {
     catch { }
     return url;
 }
+function restliEscape(value) {
+    // Escape Rest.li delimiters within field values before URL encoding.
+    return String(value).replace(/[(),:']/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase());
+}
 function buildVoyagerSearchQuery(input) {
     const hasFilters = input.companyIds.length ||
         input.experienceLevels.length ||
@@ -103,10 +107,10 @@ function buildVoyagerSearchQuery(input) {
         input.remoteTypes.length;
     const parts = [
         'origin:' + (hasFilters ? 'JOB_SEARCH_PAGE_JOB_FILTER' : 'JOB_SEARCH_PAGE_OTHER_ENTRY'),
-        'keywords:' + input.keywords,
+        'keywords:' + restliEscape(input.keywords),
     ];
     if (input.location) {
-        parts.push('locationUnion:(seoLocation:(location:' + input.location + '))');
+        parts.push('locationUnion:(seoLocation:(location:' + restliEscape(input.location) + '))');
     }
     const filters = [];
     if (input.companyIds.length)
@@ -449,6 +453,7 @@ cli({
 export const __test__ = {
     parseCsvArg,
     parseIntegerArg,
+    buildVoyagerUrl,
     mapFilterValues,
     decodeLinkedinRedirect,
     looksLinkedInAuthWallText,
