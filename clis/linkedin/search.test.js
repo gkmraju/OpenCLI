@@ -6,6 +6,7 @@ import { __test__ } from './search.js';
 const {
     parseCsvArg,
     parseIntegerArg,
+    buildVoyagerUrl,
     mapFilterValues,
     decodeLinkedinRedirect,
     looksLinkedInAuthWallText,
@@ -198,5 +199,49 @@ describe('linkedin enrichJobDetails (silent failure fix)', () => {
         await expect(enrichJobDetails(page, [
             { rank: 1, title: 'Needs Auth', company: 'X', url: 'https://www.linkedin.com/jobs/view/4' },
         ])).rejects.toBeInstanceOf(AuthRequiredError);
+    });
+});
+
+describe('linkedin Rest.li search values', () => {
+    const base = {
+        keywords: 'engineer',
+        location: '',
+        companyIds: [],
+        experienceLevels: [],
+        jobTypes: [],
+        datePostedValues: [],
+        remoteTypes: [],
+    };
+
+    it('escapes delimiters in keywords and Unicode locations without changing the Rest.li structure', () => {
+        const path = buildVoyagerUrl({
+            ...base,
+            keywords: "O'Reilly: (remote), jobs",
+            location: 'São Paulo, Brazil',
+        }, 0, 2);
+        const url = new URL(path, 'https://www.linkedin.com');
+        const query = url.searchParams.get('query');
+
+        expect(query).toContain('keywords:O%27Reilly%3A %28remote%29%2C jobs');
+        expect(query).toContain('locationUnion:(seoLocation:(location:São Paulo%2C Brazil))');
+        expect(query).toContain('origin:JOB_SEARCH_PAGE_OTHER_ENTRY');
+        expect(path).toContain('%252C'); // Survives URL decoding as %2C inside the Rest.li value.
+        expect(url.searchParams.get('start')).toBe('0');
+    });
+
+    it('preserves structural filter separators and unreserved search values', () => {
+        const path = buildVoyagerUrl({
+            ...base,
+            keywords: 'engineer',
+            location: 'New York',
+            companyIds: ['123', '456'],
+            jobTypes: ['F', 'C'],
+        }, 25, 10);
+        const query = new URL(path, 'https://www.linkedin.com').searchParams.get('query');
+
+        expect(query).toContain('keywords:engineer,locationUnion:(seoLocation:(location:New York))');
+        expect(query).toContain('selectedFilters:(company:List(123,456),jobType:List(F,C))');
+        expect(query).toContain('origin:JOB_SEARCH_PAGE_JOB_FILTER');
+        expect(path).toContain('&start=25');
     });
 });
