@@ -119,6 +119,12 @@ cli({
             help: 'Follow Reddit "more comments" stubs by calling /api/morechildren.json',
         },
         {
+            name: 'best-effort-expansion',
+            type: 'bool',
+            default: false,
+            help: 'Keep accessible comments with a partial-coverage notice if optional expansion is denied',
+        },
+        {
             name: 'expand-rounds',
             type: 'int',
             default: DEFAULT_EXPAND_ROUNDS,
@@ -137,6 +143,7 @@ cli({
         const maxReplies = Math.max(1, kwargs.replies ?? 5);
         const maxLength = Math.max(100, kwargs['max-length'] ?? 2000);
         const expandMore = Boolean(kwargs['expand-more']);
+        const bestEffortExpansion = Boolean(kwargs['best-effort-expansion']);
         const expandRounds = parseExpandRounds(kwargs['expand-rounds']);
         const postId = normalizeRedditPostId(kwargs['post-id']);
 
@@ -205,6 +212,7 @@ cli({
         var maxReplies = ${maxReplies};
         var maxLength = ${maxLength};
         var expandMore = ${JSON.stringify(expandMore)};
+        var bestEffortExpansion = ${JSON.stringify(bestEffortExpansion)};
         var expandRounds = ${expandRounds};
 
         // ---------------------------------------------------------------
@@ -249,7 +257,7 @@ cli({
         // for nested). Each round may surface new "more" stubs (because
         // expansion is bounded by Reddit's depth param), so we iterate up
         // to expandRounds times.
-        var expandMeta = { rounds: 0, fetched: 0, capped: false, errors: [] };
+        var expandMeta = { rounds: 0, fetched: 0, capped: false, errors: [], unavailable: null };
 
         if (expandMore) {
           // Index every existing t1 node so we can splice replies onto it.
@@ -329,7 +337,12 @@ cli({
                 return { kind: 'expand-failed', detail: 'morechildren request threw: ' + (e && e.message || e), expandMeta: expandMeta };
               }
               if (mcRes.status === 401 || mcRes.status === 403) {
-                return { kind: 'auth', detail: '/api/morechildren returned HTTP ' + mcRes.status + ' (write/expand likely requires login)' };
+                if (!bestEffortExpansion) {
+                  return { kind: 'auth', detail: '/api/morechildren returned HTTP ' + mcRes.status + ' (write/expand likely requires login)' };
+                }
+                expandMeta.unavailable = { endpoint: '/api/morechildren', httpStatus: mcRes.status };
+                batchFailed = true;
+                break;
               }
               if (!mcRes.ok) {
                 return { kind: 'http', httpStatus: mcRes.status, where: '/api/morechildren (round ' + (r + 1) + ', batch ' + ((b / batchSize) + 1) + ')' };
@@ -348,6 +361,8 @@ cli({
               }
               for (var t = 0; t < things.length; t++) fetchedThings.push(things[t]);
             }
+            // Do not splice a partly fetched batch into the tree after access is denied.
+            if (batchFailed) break;
             expandMeta.rounds = r + 1;
             expandMeta.fetched += fetchedThings.length;
 
@@ -541,6 +556,19 @@ cli({
             author: '',
             score: '',
             text: '[+' + hiddenTopLevel + ' more top-level comments]',
+            post_hint: '',
+            url_overridden_by_dest: '',
+            preview_image_url: '',
+            gallery_urls: [],
+          });
+        }
+
+        if (expandMeta.unavailable) {
+          rows.push({
+            type: 'COVERAGE',
+            author: '',
+            score: '',
+            text: '[PARTIAL: /api/morechildren denied expansion (HTTP ' + expandMeta.unavailable.httpStatus + '); visible comments only. Hidden replies were not retrieved.]',
             post_hint: '',
             url_overridden_by_dest: '',
             preview_image_url: '',

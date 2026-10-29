@@ -387,4 +387,46 @@ describe('reddit read adapter', () => {
             expect(script).toContain("kind: 'ok'");
         });
     });
+    it('keeps the default typed authentication failure on denied morechildren expansion', async () => {
+        const fetchMock = vi.fn(async (url) => String(url).startsWith('/comments/')
+            ? jsonResponse(redditPostEnvelope([commentThing('a', 'A'), moreThing('m', ['b'])]))
+            : jsonResponse({}, 403));
+        await expect(command.func(makeRuntimePage(fetchMock), {
+            'post-id': 'abc123', 'expand-more': true,
+        })).rejects.toBeInstanceOf(AuthRequiredError);
+    });
+
+    it.each([401, 403])('preserves accessible comments with explicit partial coverage on expansion HTTP %i', async (status) => {
+        const fetchMock = vi.fn(async (url) => String(url).startsWith('/comments/')
+            ? jsonResponse(redditPostEnvelope([commentThing('a', 'A'), moreThing('m', ['b'])]))
+            : jsonResponse({}, status));
+        const rows = await command.func(makeRuntimePage(fetchMock), {
+            'post-id': 'abc123', 'expand-more': true, 'best-effort-expansion': true,
+        });
+        expect(rows.map((row) => row.type)).toEqual(['POST', 'L0', '', 'COVERAGE']);
+        expect(rows[1].text).toBe('A');
+        expect(rows.at(-1).text).toContain('HTTP ' + status);
+        expect(rows.at(-1).text).toContain('Hidden replies were not retrieved');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not convert an inaccessible initial post into a partial success', async () => {
+        const fetchMock = vi.fn(async () => jsonResponse({}, 403));
+        await expect(command.func(makeRuntimePage(fetchMock), {
+            'post-id': 'abc123', 'expand-more': true, 'best-effort-expansion': true,
+        })).rejects.toBeInstanceOf(EmptyResultError);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not add a partial-coverage row when optional expansion succeeds', async () => {
+        const fetchMock = vi.fn(async (url) => String(url).startsWith('/comments/')
+            ? jsonResponse(redditPostEnvelope([commentThing('a', 'A'), moreThing('m', ['b'])]))
+            : jsonResponse({ json: { errors: [], data: { things: [commentThing('b', 'B')] } } }));
+        const rows = await command.func(makeRuntimePage(fetchMock), {
+            'post-id': 'abc123', 'expand-more': true, 'best-effort-expansion': true,
+        });
+        expect(rows.map((row) => row.type)).toEqual(['POST', 'L0', 'L0']);
+        expect(rows.map((row) => row.author)).toEqual(['op', 'a', 'b']);
+    });
+
 });
