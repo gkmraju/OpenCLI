@@ -138,6 +138,38 @@ describe('CDPBridge cookies', () => {
     ]);
   });
 
+  it.each(['Enter', 'Return'])('sends %s with native Enter key codes and text', async key => {
+    vi.stubEnv('OPENCLI_CDP_ENDPOINT', 'ws://127.0.0.1:9222/devtools/page/1');
+    const bridge = new CDPBridge();
+    const send = vi.spyOn(bridge, 'send').mockResolvedValue({ result: { value: 'visible' } });
+    const page = await bridge.connect();
+    send.mockClear();
+
+    await page.pressKey(key);
+
+    expect(send.mock.calls.filter(([method]) => method !== 'Runtime.evaluate')).toEqual([
+      ['Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key: 'Enter',
+        modifiers: 0,
+        code: 'Enter',
+        windowsVirtualKeyCode: 13,
+        nativeVirtualKeyCode: 13,
+        text: '\r',
+        unmodifiedText: '\r',
+      }],
+      ['Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key: 'Enter',
+        modifiers: 0,
+        code: 'Enter',
+        windowsVirtualKeyCode: 13,
+        nativeVirtualKeyCode: 13,
+      }],
+    ]);
+    await bridge.close();
+  });
+
   it.each(['hidden', 'prerender', undefined])('blocks native input when visibility is %s', async visibility => {
     vi.stubEnv('OPENCLI_CDP_ENDPOINT', 'ws://127.0.0.1:9222/devtools/page/1');
     const bridge = new CDPBridge();

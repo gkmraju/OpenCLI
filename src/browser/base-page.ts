@@ -1303,15 +1303,28 @@ export abstract class CDPBasePage extends BasePage {
       if (mod === 'Meta') modifierFlags |= 4;
       if (mod === 'Shift') modifierFlags |= 8;
     }
+    // Enter needs a virtual key code and text for Chrome to deliver the
+    // legacy keyCode=13 / keypress sequence used by some form handlers.
+    // Without them CDP reports a trusted keydown with keyCode=0 (issue #2751).
+    const isEnter = key === 'Enter' || key === 'Return';
+    const eventKey = isEnter ? 'Enter' : key;
+    const enterFields = isEnter ? {
+      code: 'Enter',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    } : {};
     await this.cdp('Input.dispatchKeyEvent', {
       type: 'keyDown',
-      key,
+      key: eventKey,
       modifiers: modifierFlags,
+      ...enterFields,
+      ...(isEnter ? { text: '\r', unmodifiedText: '\r' } : {}),
     });
     await this.cdp('Input.dispatchKeyEvent', {
       type: 'keyUp',
-      key,
+      key: eventKey,
       modifiers: modifierFlags,
+      ...enterFields,
     });
   }
 }
