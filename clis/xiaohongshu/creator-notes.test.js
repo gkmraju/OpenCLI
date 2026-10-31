@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import vm from 'node:vm';
 import { CommandExecutionError } from '@jackwener/opencli/errors';
 import { getRegistry } from '@jackwener/opencli/registry';
 import { __test__, parseCreatorNoteIdsFromHtml, parseCreatorNotesText } from './creator-notes.js';
@@ -173,4 +174,91 @@ describe('xiaohongshu creator-notes', () => {
         await expect(cmd.func(page, { limit: 20 })).rejects.toBeInstanceOf(CommandExecutionError);
     });
 
+});
+
+function fakeNoteCard(id, nodes) {
+    return {
+        getAttribute: (name) => name === 'data-impression' ? JSON.stringify({ noteId: id }) : null,
+        querySelector: (selector) => selector.split(',').map((part) => nodes[part.trim()]).find(Boolean) || null,
+        querySelectorAll: (selector) => selector.split(',').flatMap((part) => nodes[part.trim()] || []),
+    };
+}
+
+describe('creator note-manager DOM compatibility (#2707)', () => {
+    it('supports the new note-card DOM and preserves note ids, dates and metric order', () => {
+        const card = fakeNoteCard('aaaaaaaaaaaaaaaaaaaaaaaa', {
+            '.note-card__title': { innerText: 'New layout note' },
+            '.note-card__time': { innerText: '发布于 2026年10月24日 10:30' },
+            '.note-card__stat': [
+                { innerText: '40,104' },
+                { innerText: '2,430' },
+                { innerText: '692' },
+                { innerText: '511' },
+                { innerText: '12' },
+            ],
+        });
+        const document = {
+            querySelectorAll: (selector) => {
+                expect(selector).toContain('.note-card');
+                return [card];
+            },
+        };
+        const cards = JSON.parse(JSON.stringify(vm.runInNewContext(__test__.noteManagerCardsScript, { document })));
+        expect(cards).toEqual([{
+            id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+            title: 'New layout note',
+            date: '2026年10月24日 10:30',
+            metrics: [40104, 2430, 692, 511, 12],
+        }]);
+    });
+
+    it('retains the legacy div.note selectors', () => {
+        const card = fakeNoteCard('bbbbbbbbbbbbbbbbbbbbbbbb', {
+            '.title': { innerText: 'Legacy note' },
+            '.time_status': { innerText: '发布于 2025年12月04日 19:45' },
+            '.icon_list .icon': [
+                { innerText: '15' }, { innerText: '2' }, { innerText: '3' }, { innerText: '4' },
+            ],
+        });
+        const cards = JSON.parse(JSON.stringify(vm.runInNewContext(__test__.noteManagerCardsScript, {
+            document: { querySelectorAll: () => [card] },
+        })));
+        expect(cards).toEqual([{
+            id: 'bbbbbbbbbbbbbbbbbbbbbbbb',
+            title: 'Legacy note',
+            date: '2025年12月04日 19:45',
+            metrics: [15, 2, 3, 4],
+        }]);
+    });
+
+    it('uses the shared card reader when signed analytics endpoints return no rows', async () => {
+        const page = createPageMock(undefined);
+        const cardRows = [{
+            id: 'cccccccccccccccccccccccc',
+            title: 'Fallback note',
+            date: '2026年10月24日 10:30',
+            metrics: [40104, 2430, 692, 511],
+        }];
+        page.evaluate = vi.fn(async (source) => {
+            if (source === __test__.noteManagerCardsScript) return cardRows;
+            if (source === 'JSON.stringify(window.__xhsCapture || {})') return '{}';
+            if (source.includes('const resp = await fetch')) return { error: 'HTTP 406' };
+            if (source.includes('await fetch(')) return true;
+            return undefined;
+        });
+        const cmd = getRegistry().get('xiaohongshu/creator-notes');
+        const notes = await cmd.func(page, { limit: 5 });
+        expect(notes).toEqual([{
+            rank: 1,
+            id: 'cccccccccccccccccccccccc',
+            title: 'Fallback note',
+            date: '2026年10月24日 10:30',
+            views: 40104,
+            likes: 692,
+            collects: 511,
+            comments: 2430,
+            url: 'https://creator.xiaohongshu.com/statistics/note-detail?noteId=cccccccccccccccccccccccc',
+        }]);
+        expect(page.evaluate).toHaveBeenCalledWith(__test__.noteManagerCardsScript);
+    });
 });
