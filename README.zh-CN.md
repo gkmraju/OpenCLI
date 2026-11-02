@@ -127,6 +127,23 @@ npx skills add jackwener/opencli --skill opencli-browser
 npx skills add jackwener/opencli --skill opencli-usage
 ```
 
+### 排查旧版 sitemap skill（OpenCLI 1.8.6）
+
+OpenCLI 1.8.6 附带的 `opencli-sitemap-author` skill 的 YAML 元数据格式有误；1.8.7 修复了该格式，但 2.0.0 已移除 sitemap 相关 skill。Agent 单独安装的旧副本可能在升级 OpenCLI 后仍然保留；重新安装当前 skill **不保证**自动删除旧副本。
+
+如果 Agent 报告 `opencli-sitemap-author/SKILL.md` 的 YAML 解析错误：
+
+1. 核对报错中显示的**完整路径**，确认是旧的 `opencli-sitemap-author`（或已移除的 `opencli-browser-sitemap`），而不是当前或自己修改过的 skill。
+2. 只备份并移走**对应的旧 skill 目录**，放到 Agent 不会扫描的位置。例如，macOS/Linux 上 Pi 报错路径为 `~/.agents/skills/opencli-sitemap-author/SKILL.md` 时：
+
+   ```sh
+   mv "$HOME/.agents/skills/opencli-sitemap-author" "$HOME/opencli-sitemap-author.backup-$(date +%s)"
+   ```
+
+3. 执行 `npx skills add jackwener/opencli` 刷新当前支持的 skill，重启 Agent 后再次查看诊断信息。
+
+如果保留自行维护的历史副本，可以给 YAML 的 `description` 加引号或改为块标量（`|`）来修复解析错误，但这**不会**恢复已移除的 sitemap 功能。不要删除整个 skills 目录，也不要假设升级 npm 包会清理 Agent 自行管理的副本。
+
 ### 选择哪个 skill
 
 | Skill | 适用场景 | 你对 AI Agent 说的话 |

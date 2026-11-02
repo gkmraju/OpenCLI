@@ -165,6 +165,23 @@ npx skills add jackwener/opencli --skill opencli-browser
 npx skills add jackwener/opencli --skill opencli-usage
 ```
 
+### Troubleshooting legacy sitemap skills (OpenCLI 1.8.6)
+
+OpenCLI 1.8.6 shipped `opencli-sitemap-author` with invalid YAML front matter. Version 1.8.7 fixed the YAML, but the sitemap skills were removed in 2.0.0. Agent-managed skill copies can survive an OpenCLI upgrade; reinstalling current skills does **not** guarantee removal of obsolete copies.
+
+If an agent reports a YAML parse error in `opencli-sitemap-author/SKILL.md`:
+
+1. Check the **exact diagnostic path**. Confirm it is the old `opencli-sitemap-author` (or removed `opencli-browser-sitemap`), not a current or locally customized skill.
+2. Back up **only that obsolete skill directory** outside all agent skill-search paths. For example, for Pi's `~/.agents/skills/opencli-sitemap-author/SKILL.md` on macOS/Linux:
+
+   ```sh
+   mv "$HOME/.agents/skills/opencli-sitemap-author" "$HOME/opencli-sitemap-author.backup-$(date +%s)"
+   ```
+
+3. Run `npx skills add jackwener/opencli` to refresh supported skills, then restart the agent and check its diagnostics again.
+
+If you maintain a historical custom copy, quoting its YAML `description` or using a block scalar (`|`) fixes parsing only; it does **not** restore removed sitemap functionality. Do not delete the entire skills directory or assume npm upgrades clean up agent-managed copies.
+
 ### Which skill to use
 
 | Skill | When to use | Example prompt to your AI agent |
