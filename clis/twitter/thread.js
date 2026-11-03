@@ -75,7 +75,7 @@ function describeThreadCoverage({ pagesScanned, stopReason, nextCursor, returned
         pages_scanned: pagesScanned,
         stop_reason: stopReason,
         coverage: stopReason === 'cursor_exhausted' ? 'exhausted' : 'partial_or_unknown',
-        has_more: Boolean(nextCursor),
+        has_more: Boolean(nextCursor) || collectedCount > returnedCount,
         returned_count: returnedCount,
         collected_count: collectedCount,
     };
