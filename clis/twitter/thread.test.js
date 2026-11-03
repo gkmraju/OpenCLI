@@ -56,3 +56,24 @@ describe('twitter thread parser', () => {
         });
     });
 });
+
+
+describe('twitter thread coverage receipt', () => {
+    const coverage = __test__.describeThreadCoverage;
+    it('reports cursor exhaustion without claiming universal thread completeness', () => {
+        expect(coverage({ pagesScanned: 2, stopReason: 'cursor_exhausted', nextCursor: null, returnedCount: 3, collectedCount: 3 })).toEqual({
+            pages_scanned: 2, stop_reason: 'cursor_exhausted', coverage: 'exhausted',
+            has_more: false, returned_count: 3, collected_count: 3,
+        });
+    });
+    it('marks output clipping even when upstream cursor is exhausted', () => {
+        expect(coverage({ pagesScanned: 1, stopReason: 'limit_reached', nextCursor: null, returnedCount: 2, collectedCount: 5 })).toMatchObject({
+            stop_reason: 'limit_reached', coverage: 'partial_or_unknown', has_more: true,
+        });
+    });
+    it.each(['page_cap', 'repeated_cursor', 'upstream_error'])('does not claim completeness on %s', (stopReason) => {
+        expect(coverage({ pagesScanned: 5, stopReason, nextCursor: 'cursor-5', returnedCount: 4, collectedCount: 4 })).toMatchObject({
+            stop_reason: stopReason, coverage: 'partial_or_unknown', has_more: true,
+        });
+    });
+});
