@@ -108,7 +108,8 @@ describe('twitter whoami command', () => {
 
         await whoamiCommand().func(page);
 
-        expect(page.wait).toHaveBeenCalledWith({ selector: '[data-testid="primaryColumn"]' });
+        expect(page.wait).toHaveBeenCalledWith({ selector: 'main' });
+        expect(page.evaluate.mock.calls[0][0]).toContain('nav a[aria-label="Profile"]');
     });
 });
 
