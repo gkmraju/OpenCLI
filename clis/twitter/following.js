@@ -159,14 +159,15 @@ cli({
             // is rendered; the framework pre-nav lands on bare x.com which
             // does not always expose AppTabBar_Profile_Link.
             await page.goto('https://x.com/home');
-            await page.wait({ selector: '[data-testid="primaryColumn"]' });
+            await page.wait({ selector: 'main' });
             // Bridge wraps primitive page.evaluate returns as { session, data:<value> };
             // unwrap so the href string is usable downstream.
             // NOTE: the function-literal form `() => ...` silently drops
             // primitive return values through the bridge — only the template
             // string form preserves the `data` field.
             const href = unwrapBrowserResult(await page.evaluate(`() => {
-        const link = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+        const link = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]')
+          || document.querySelector('nav a[aria-label="Profile"]');
         return link ? link.getAttribute('href') : null;
       }`));
             if (!href || typeof href !== 'string')
