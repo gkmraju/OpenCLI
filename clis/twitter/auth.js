@@ -24,7 +24,8 @@ function unwrapTwitterEvaluateResult(value, label) {
 
 async function readScreenName(page) {
   const href = unwrapTwitterEvaluateResult(await page.evaluate(`() => {
-    const link = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+    const link = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]')
+      || document.querySelector('nav a[aria-label="Profile"]');
     return link ? link.getAttribute('href') : null;
   }`), 'profile link probe');
   if (href !== null && typeof href !== 'string') {
@@ -56,7 +57,7 @@ async function verifyTwitterIdentity(page, { phase } = {}) {
     throw new AuthRequiredError('x.com', 'Twitter/X auth cookies are missing');
   }
   await page.goto('https://x.com/home');
-  await page.wait({ selector: '[data-testid="primaryColumn"]' }).catch(() => { });
+  await page.wait({ selector: 'main' }).catch(() => { });
   // Login polls repeat every ~2s; they keep the single read and skip the #2252 settle loop.
   const username = phase === 'poll'
     ? await readScreenName(page)
